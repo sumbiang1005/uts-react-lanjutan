@@ -71,7 +71,11 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// --- CRUD MAHASISWA ---
+// ============================================
+// ============ CRUD MAHASISWA ================
+// ============================================
+
+// --- GET ALL MAHASISWA (READ) ---
 app.get('/api/mahasiswa', verifyToken, async (req, res) => {
     try {
         const result = await db.query('SELECT * FROM mhs_tb ORDER BY id ASC');
@@ -82,35 +86,135 @@ app.get('/api/mahasiswa', verifyToken, async (req, res) => {
     }
 });
 
+// --- GET MAHASISWA BY ID (READ DETAIL) ---
+app.get('/api/mahasiswa/:id', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await db.query('SELECT * FROM mhs_tb WHERE id = $1', [id]);
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: "Data mahasiswa tidak ditemukan" });
+        }
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error("❌ GET MHS BY ID ERROR:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- CREATE MAHASISWA (TAMBAH) ---
 app.post('/api/mahasiswa', verifyToken, async (req, res) => {
     const { name, nim, jurusan, ipk } = req.body;
+    
+    // Validasi input
+    if (!name || !nim || !jurusan || !ipk) {
+        return res.status(400).json({ error: "Semua field harus diisi" });
+    }
+    
     try {
-        await db.query(
-            'INSERT INTO mhs_tb (name, nim, jurusan, ipk, "isActive") VALUES ($1, $2, $3, $4, $5)', 
+        const result = await db.query(
+            'INSERT INTO mhs_tb (name, nim, jurusan, ipk, "isActive") VALUES ($1, $2, $3, $4, $5) RETURNING *', 
             [name, nim, jurusan, ipk, true]
         );
-        res.status(201).json({ message: "Mahasiswa Ditambahkan" });
+        console.log("✅ Mahasiswa ditambahkan:", result.rows[0]);
+        res.status(201).json({ 
+            message: "Mahasiswa Ditambahkan", 
+            data: result.rows[0] 
+        });
     } catch (err) { 
         console.error("❌ ADD MHS ERROR:", err.message);
         res.status(500).json({ error: err.message }); 
     }
 });
 
+// --- UPDATE MAHASISWA (EDIT) ---
+app.put('/api/mahasiswa/:id', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    const { name, nim, jurusan, ipk } = req.body;
+    
+    console.log("📝 Update data attempt:", { id, name, nim, jurusan, ipk });
+    
+    // Validasi input
+    if (!name || !nim || !jurusan || !ipk) {
+        return res.status(400).json({ error: "Semua field harus diisi" });
+    }
+    
+    try {
+        // Cek apakah data ada
+        const cekData = await db.query('SELECT * FROM mhs_tb WHERE id = $1', [id]);
+        
+        if (cekData.rows.length === 0) {
+            return res.status(404).json({ error: "Data mahasiswa tidak ditemukan" });
+        }
+        
+        // Update data
+        const result = await db.query(
+            'UPDATE mhs_tb SET name = $1, nim = $2, jurusan = $3, ipk = $4 WHERE id = $5 RETURNING *',
+            [name, nim, jurusan, ipk, id]
+        );
+        
+        console.log("✅ Update berhasil:", result.rows[0]);
+        res.json({ 
+            message: "Data mahasiswa berhasil diupdate", 
+            data: result.rows[0] 
+        });
+        
+    } catch (err) { 
+        console.error("❌ UPDATE DATA ERROR:", err.message);
+        res.status(500).json({ error: err.message }); 
+    }
+});
+
+// --- UPDATE STATUS MAHASISWA ---
 app.patch('/api/mahasiswa/:id/status', verifyToken, async (req, res) => {
     const { isActive } = req.body;
+    const { id } = req.params;
+    
+    console.log("📝 Update status attempt:", { id, isActive });
+    
     try {
-        await db.query('UPDATE mhs_tb SET "isActive" = $1 WHERE id = $2', [isActive, req.params.id]);
-        res.json({ message: "Status Diperbarui" });
+        // Cek apakah data ada
+        const cekData = await db.query('SELECT * FROM mhs_tb WHERE id = $1', [id]);
+        
+        if (cekData.rows.length === 0) {
+            return res.status(404).json({ error: "Data mahasiswa tidak ditemukan" });
+        }
+        
+        // Update status
+        const result = await db.query(
+            'UPDATE mhs_tb SET "isActive" = $1 WHERE id = $2 RETURNING *', 
+            [isActive, id]
+        );
+        
+        console.log("✅ Status berhasil diupdate:", result.rows[0]);
+        res.json({ 
+            message: "Status Diperbarui", 
+            data: result.rows[0] 
+        });
+        
     } catch (err) { 
         console.error("❌ UPDATE STATUS ERROR:", err.message);
         res.status(500).json({ error: err.message }); 
     }
 });
 
+// --- DELETE MAHASISWA (HAPUS) ---
 app.delete('/api/mahasiswa/:id', verifyToken, async (req, res) => {
+    const { id } = req.params;
+    
     try {
-        await db.query('DELETE FROM mhs_tb WHERE id = $1', [req.params.id]);
+        // Cek apakah data ada
+        const cekData = await db.query('SELECT * FROM mhs_tb WHERE id = $1', [id]);
+        
+        if (cekData.rows.length === 0) {
+            return res.status(404).json({ error: "Data mahasiswa tidak ditemukan" });
+        }
+        
+        // Hapus data
+        await db.query('DELETE FROM mhs_tb WHERE id = $1', [id]);
+        
+        console.log("✅ Data mahasiswa dengan ID", id, "berhasil dihapus");
         res.json({ message: "Berhasil Hapus" });
+        
     } catch (err) { 
         console.error("❌ DELETE MHS ERROR:", err.message);
         res.status(500).json({ error: err.message }); 
@@ -121,4 +225,13 @@ const PORT = 3000;
 app.listen(PORT, () => {
     console.log(`🚀 Server UTS Jalan di port ${PORT}`);
     console.log(`📡 API tersedia di http://localhost:${PORT}`);
+    console.log(`📌 Endpoint yang tersedia:`);
+    console.log(`   - POST   /api/register`);
+    console.log(`   - POST   /api/login`);
+    console.log(`   - GET    /api/mahasiswa`);
+    console.log(`   - GET    /api/mahasiswa/:id`);
+    console.log(`   - POST   /api/mahasiswa`);
+    console.log(`   - PUT    /api/mahasiswa/:id`);
+    console.log(`   - PATCH  /api/mahasiswa/:id/status`);
+    console.log(`   - DELETE /api/mahasiswa/:id`);
 });
